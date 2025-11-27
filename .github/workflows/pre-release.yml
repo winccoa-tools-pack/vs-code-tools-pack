@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -37,6 +37,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install dependencies (if any)
+        shell: bash
         run: |
           if [ -f package.json ]; then
             npm ci || npm install
