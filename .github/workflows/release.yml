@@ -1,0 +1,282 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  actions: write
+  checks: write
+  issues: write
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Test
+        run: npm test
+        env:
+          CI: true
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true && startsWith(github.head_ref, 'release/'))
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+      - name: Install standard-version
+        run: npm install -g standard-version
+
+      - name: Detect Release Type from PR Labels
+        id: detect-type
+        run: |
+          MERGE_COMMIT_MSG=$(git log -1 --pretty=%s)
+          PR_NUMBER=$(echo "$MERGE_COMMIT_MSG" | grep -o '#[0-9]\+' | head -1 | sed 's/#//') || true
+          RELEASE_TYPE=""
+          FORCE_VERSION=""
+          if [ -n "$PR_NUMBER" ]; then
+            LABELS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER" | jq -r '.labels[]?.name' 2>/dev/null || echo "")
+            if echo "$LABELS" | grep -q "breaking-change\|major"; then
+              RELEASE_TYPE="major"
+            elif echo "$LABELS" | grep -q "enhancement\|feature\|minor"; then
+              RELEASE_TYPE="minor"
+            elif echo "$LABELS" | grep -q "bug\|fix\|patch"; then
+              RELEASE_TYPE="patch"
+            elif echo "$LABELS" | grep -q "documentation\|docs"; then
+              RELEASE_TYPE="patch"
+            elif echo "$LABELS" | grep -q "dependencies\|chore"; then
+              RELEASE_TYPE="patch"
+            fi
+            VERSION_LABEL=$(echo "$LABELS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+            if [ -n "$VERSION_LABEL" ]; then
+              FORCE_VERSION=$(echo "$VERSION_LABEL" | sed 's/^v//')
+            fi
+          fi
+          echo "release-type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
+          echo "force-version=$FORCE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Validate Version Consistency
+        id: version-check
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          if [[ "$CURRENT_VERSION" == *"-"* ]]; then
+            BASE_VERSION=$(echo "$CURRENT_VERSION" | cut -d'-' -f1)
+            npm version "$BASE_VERSION" --no-git-tag-version
+            CLEAN_VERSION=$(node -p "require('./package.json').version")
+          else
+            CLEAN_VERSION="$CURRENT_VERSION"
+          fi
+          echo "clean-version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: release
+        run: |
+          CURRENT_VERSION="${{ steps.version-check.outputs.clean-version }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+            standard-version --release-as $RELEASE_TYPE --no-verify --skip.commit=true --skip.tag=true
+          elif [[ -n "${{ steps.detect-type.outputs.force-version }}" ]]; then
+            FORCE_VERSION="${{ steps.detect-type.outputs.force-version }}"
+            standard-version --release-as $FORCE_VERSION --no-verify --skip.commit=true --skip.tag=true
+          elif [[ -n "${{ steps.detect-type.outputs.release-type }}" ]]; then
+            RELEASE_TYPE="${{ steps.detect-type.outputs.release-type }}"
+            standard-version --release-as $RELEASE_TYPE --no-verify --skip.commit=true --skip.tag=true
+          else
+            standard-version --no-verify --skip.commit=true --skip.tag=true
+          fi
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          git tag "v$NEW_VERSION"
+          if ! git diff --staged --quiet || ! git diff --quiet; then
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract Changelog
+        id: changelog
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          CHANGELOG_CONTENT=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/ {flag=0} flag" CHANGELOG.md || true)
+          if [ -z "$CHANGELOG_CONTENT" ]; then
+            CHANGELOG_CONTENT=$(awk "/^## $VERSION/{flag=1; next} /^## /{flag=0} flag" CHANGELOG.md || true)
+          fi
+          if [ -z "$CHANGELOG_CONTENT" ]; then
+            CHANGELOG_CONTENT="Changes in version $VERSION"
+          fi
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG_CONTENT"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create PR for version changes
+        if: steps.release.outputs.has-changes == 'true'
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          BRANCH_NAME="release/v$VERSION"
+          git checkout -b "$BRANCH_NAME"
+          git add package.json CHANGELOG.md || true
+          cat > /tmp/commitmsg <<'COMMIT'
+chore(release): $VERSION
+
+- Update version to $VERSION
+- Update CHANGELOG.md with release notes
+
+[skip ci]
+COMMIT
+          git commit -F /tmp/commitmsg || echo "No changes to commit"
+          if git push origin "$BRANCH_NAME"; then
+            if command -v gh &> /dev/null; then
+              gh pr create --title "chore(release): Release v$VERSION" --body "Automated release PR for v$VERSION" --label "chore,release" --head "$BRANCH_NAME" --base main || echo "Failed to create PR via CLI"
+            else
+              echo "Branch pushed. Please create PR manually for version updates."
+            fi
+          else
+            echo "Failed to push branch $BRANCH_NAME"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push tag only
+        run: |
+          NEW_TAG="v${{ steps.release.outputs.version }}"
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$NEW_TAG" || echo "Failed to push tag"
+
+      - name: Package Extension
+        run: |
+          npm install -g @vscode/vsce
+          vsce package
+
+      - name: Upload VSIX Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: extension-${{ steps.release.outputs.version }}
+          path: "*.vsix"
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.release.outputs.version }}"
+          name: "Release v${{ steps.release.outputs.version }}"
+          target_commitish: ${{ github.sha }}
+          body: |
+            ## 🚀 Release v${{ steps.release.outputs.version }}
+
+            ${{ steps.changelog.outputs.changelog }}
+          files: "*.vsix"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-marketplace:
+    needs: [test, release]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish to VS Code Marketplace
+        run: |
+          npm install -g @vscode/vsce
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format for marketplace: $PACKAGE_VERSION"
+            exit 1
+          fi
+          vsce package
+          if [ -n "${{ secrets.VSCE_PAT }}" ]; then
+            vsce publish $PACKAGE_VERSION -p ${{ secrets.VSCE_PAT }}
+          else
+            echo "VSCE_PAT not found - skipping marketplace publish"
+          fi
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  notify-success:
+    needs: [release, publish-marketplace]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Success Notification
+        run: |
+          echo "Release v${{ needs.release.outputs.version }} completed successfully!"
+          echo "URL: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.release.outputs.version }}"
