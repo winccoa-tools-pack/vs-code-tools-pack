@@ -17,4 +17,6 @@
     "extensionPack": [
         "mPokornyETM.wincc-oa-projects"
     ]
+    ,
+    "icon": "images/icon-128.png"
 }

@@ -9,7 +9,7 @@ yarn.lock
 
 # Documentation and local development files
 docs/
-README.md
+# README.md is packaged so the extension includes the overview and images
 
 # Tests and CI
 tests/
