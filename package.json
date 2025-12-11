@@ -8,15 +8,28 @@
     },
     "description": "A small extension pack that groups VS Code tools used for WinCC OA development.",
     "categories": ["Extension Packs"],
-    "keywords": ["wincc", "wincc-oa", "scada", "extension-pack"],
+    "keywords": [
+        "wincc-oa",
+        "scada",
+        "hmi",
+        "wincc-oa-script-action",
+        "wincc-oa-engineering",
+        "wincc-oa-runtime",
+        "siemens",
+        "etm",
+        "industrial",
+        "automation",
+        "extension-pack"
+    ],
     "repository": {
         "type": "git",
         "url": "https://github.com/winccoa-tools-pack/vs-code-tools-pack.git"
     },
     "license": "MIT",
     "extensionPack": [
-        "mPokornyETM.wincc-oa-projects"
-    ]
-    ,
+        "mPokornyETM.wincc-oa-projects",
+        "RichardJanisch.winccoa-script-actions",
+        "RichardJanisch.winccoa-vscode-logviewer"
+    ],
     "icon": "images/icon-128.png"
 }
