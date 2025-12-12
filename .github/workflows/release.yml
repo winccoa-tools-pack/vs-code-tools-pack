@@ -1,20 +1,8 @@
 name: Release
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      release_type:
-        description: "Release type"
-        required: true
-        default: "patch"
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
 
 permissions:
   contents: write
@@ -44,9 +32,7 @@ jobs:
   release:
     needs: test
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true && startsWith(github.head_ref, 'release/'))
+    if: github.event_name == 'push'
     outputs:
       version: ${{ steps.release.outputs.version }}
       changelog: ${{ steps.changelog.outputs.changelog }}
@@ -77,33 +63,7 @@ jobs:
       - name: Install standard-version
         run: npm install -g standard-version
 
-      - name: Detect Release Type from PR Labels
-        id: detect-type
-        run: |
-          MERGE_COMMIT_MSG=$(git log -1 --pretty=%s)
-          PR_NUMBER=$(echo "$MERGE_COMMIT_MSG" | grep -o '#[0-9]\+' | head -1 | sed 's/#//') || true
-          RELEASE_TYPE=""
-          FORCE_VERSION=""
-          if [ -n "$PR_NUMBER" ]; then
-            LABELS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER" | jq -r '.labels[]?.name' 2>/dev/null || echo "")
-            if echo "$LABELS" | grep -q "breaking-change\|major"; then
-              RELEASE_TYPE="major"
-            elif echo "$LABELS" | grep -q "enhancement\|feature\|minor"; then
-              RELEASE_TYPE="minor"
-            elif echo "$LABELS" | grep -q "bug\|fix\|patch"; then
-              RELEASE_TYPE="patch"
-            elif echo "$LABELS" | grep -q "documentation\|docs"; then
-              RELEASE_TYPE="patch"
-            elif echo "$LABELS" | grep -q "dependencies\|chore"; then
-              RELEASE_TYPE="patch"
-            fi
-            VERSION_LABEL=$(echo "$LABELS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-            if [ -n "$VERSION_LABEL" ]; then
-              FORCE_VERSION=$(echo "$VERSION_LABEL" | sed 's/^v//')
-            fi
-          fi
-          echo "release-type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
-          echo "force-version=$FORCE_VERSION" >> $GITHUB_OUTPUT
+      # PR label detection and workflow_dispatch inputs removed
 
       - name: Validate Version Consistency
         id: version-check
@@ -122,18 +82,8 @@ jobs:
         id: release
         run: |
           CURRENT_VERSION="${{ steps.version-check.outputs.clean-version }}"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            RELEASE_TYPE="${{ github.event.inputs.release_type }}"
-            standard-version --release-as $RELEASE_TYPE --no-verify --skip.commit=true --skip.tag=true
-          elif [[ -n "${{ steps.detect-type.outputs.force-version }}" ]]; then
-            FORCE_VERSION="${{ steps.detect-type.outputs.force-version }}"
-            standard-version --release-as $FORCE_VERSION --no-verify --skip.commit=true --skip.tag=true
-          elif [[ -n "${{ steps.detect-type.outputs.release-type }}" ]]; then
-            RELEASE_TYPE="${{ steps.detect-type.outputs.release-type }}"
-            standard-version --release-as $RELEASE_TYPE --no-verify --skip.commit=true --skip.tag=true
-          else
-            standard-version --no-verify --skip.commit=true --skip.tag=true
-          fi
+          # For push-based releases always run standard-version to compute next version
+          standard-version --no-verify --skip.commit=true --skip.tag=true
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           git tag "v$NEW_VERSION"
