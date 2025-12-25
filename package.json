@@ -19,7 +19,18 @@
         "etm",
         "industrial",
         "automation",
-        "extension-pack"
+        "extension-pack",
+        "ctrl",
+        "ctrlpp",
+        "wincc-oa-ctrl-lang",
+        "wincc-oa-ctrl-lang-syntax-check",
+        "wincc-oa-ctrl-lang-prettier",
+        "wincc-oa-control-manager",
+        "testing",
+        "wincc-oa-test",
+        "test-view",
+        "test-executor",
+        "wincc-oa-project-managment"
     ],
     "repository": {
         "type": "git",
@@ -29,7 +40,10 @@
     "extensionPack": [
         "mPokornyETM.wincc-oa-projects",
         "RichardJanisch.winccoa-script-actions",
-        "RichardJanisch.winccoa-vscode-logviewer"
+        "RichardJanisch.winccoa-vscode-logviewer",
+        "RichardJanisch.winccoa-vscode-tests",
+        "RichardJanisch.winccoa-sidepanel",
+        "RichardJanisch.winccoa-ctrl-lang"
     ],
     "icon": "images/icon-128.png"
 }
