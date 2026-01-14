@@ -43,10 +43,11 @@ jobs:
         run: |
           VERSION="${{ needs.versioning.outputs.version }}"
           PREFIX="v$VERSION-"
+          REPO="${GITHUB_REPOSITORY}"
 
           echo "🔎 Looking for prerelease tags starting with: $PREFIX"
 
-          PRERELEASE_TAG=$(gh release list --limit 200 \
+          PRERELEASE_TAG=$(gh release list --repo "$REPO" --limit 200 \
             --json tagName,isPrerelease,createdAt \
             --jq "[.[] | select(.isPrerelease == true and (.tagName | startswith(\"$PREFIX\"))) ] | sort_by(.createdAt) | reverse | .[0].tagName" 2>/dev/null)
 
@@ -88,8 +89,9 @@ jobs:
         run: |
           mkdir -p dist
           PRERELEASE_TAG="${{ needs.precheck.outputs.prerelease_tag }}"
+          REPO="${GITHUB_REPOSITORY}"
 
-          gh release download "$PRERELEASE_TAG" --pattern "*.vsix" --dir dist
+          gh release download --repo "$REPO" "$PRERELEASE_TAG" --pattern "*.vsix" --dir dist
 
           VSIX_PATH=$(ls -1 dist/*.vsix 2>/dev/null | head -n 1)
           if [ -z "$VSIX_PATH" ]; then
@@ -142,10 +144,11 @@ jobs:
         run: |
           VERSION="${{ needs.versioning.outputs.version }}"
           PREFIX="v$VERSION-"
+          REPO="${GITHUB_REPOSITORY}"
 
           echo "🧹 Deleting prereleases with tag prefix: $PREFIX"
 
-          TAGS=$(gh release list --limit 200 --json tagName,isPrerelease \
+          TAGS=$(gh release list --repo "$REPO" --limit 200 --json tagName,isPrerelease \
             --jq "[.[] | select(.isPrerelease == true and (.tagName | startswith(\"$PREFIX\"))) ] | .[].tagName")
 
           if [ -z "$TAGS" ]; then
@@ -155,7 +158,7 @@ jobs:
 
           for TAG in $TAGS; do
             echo "  - Deleting $TAG"
-            gh release delete "$TAG" --yes --cleanup-tag || echo "⚠️ Failed to delete $TAG"
+            gh release delete --repo "$REPO" "$TAG" --yes --cleanup-tag || echo "⚠️ Failed to delete $TAG"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
