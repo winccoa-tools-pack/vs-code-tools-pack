@@ -116,3 +116,93 @@ jobs:
         run: npm run test:unit
         env:
           CI: true
+
+  integration-winccoa:
+    needs: [detect-extension-pack, test]
+    if: ${{ needs.detect-extension-pack.outputs.is_extension_pack != 'true' && needs.test.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - mpokornyetm/winccoa-tools-pack-vscode-winccoa-tests:winccoa-3.19.9-node20-vscode-winccoa-tests
+
+    env:
+      WORKDIR: /workspace
+      IMAGE: ${{ matrix.image }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        shell: bash
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DOCKER_USER:-}" ] && [ -n "${DOCKER_PASSWORD:-}" ]; then
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin
+          else
+            echo "Docker credentials not available, attempting to pull public image"
+          fi
+
+      - name: Pull WinCC OA image
+        shell: bash
+        run: docker pull "$IMAGE"
+
+      - name: Run WinCC OA container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name winccoa-ci \
+            -v "$GITHUB_WORKSPACE":$WORKDIR:rw \
+            -e CI=true \
+            -w $WORKDIR \
+            "$IMAGE" tail -f /dev/null
+
+      - name: Show Node on runner
+        shell: bash
+        run: node -v || true
+
+      - name: Wait for WinCC OA readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for WinCC OA inside container..."
+          for i in {1..60}; do
+            if docker exec winccoa-ci sh -c '[ -x /opt/WinCC_OA/bin/winccoa ]'; then
+              echo "Container ready (attempt $i)";
+              break;
+            fi
+            sleep 2
+          done
+
+      - name: Run integration tests inside container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec --user root winccoa-ci sh -c '
+            set -e
+            echo "Node version: $(node -v)"
+            echo "Starting integration tests under Xvfb"
+            xvfb-run -s "-screen 0 1280x1024x24" npm run ci:integration
+          '
+
+      - name: Collect logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "==== docker logs ===="
+          docker logs winccoa-ci || true
+
+      - name: Stop and remove container
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f winccoa-ci || true
