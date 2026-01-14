@@ -9,7 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  workflows: write
+  issues: write
 
 jobs:
   sync:
@@ -30,4 +30,5 @@ jobs:
       pr_body:   "Automated sync from template repository."
       pr_labels: "sync, automated"
       branch_prefix: "chore/template-sync"
-    secrets: inherit
+    secrets:
+      token: ${{ secrets.TEMPLATE_SYNC_PAT }}
