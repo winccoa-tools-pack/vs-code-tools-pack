@@ -1,14 +1,11 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows:
-      - "CI/CD Pipeline"
-      - "Integration Tests - WinCC OA"
-    types:
-      - completed
+  pull_request:
     branches:
       - main
+    types:
+      - closed
   workflow_dispatch:
     inputs: {}
 
@@ -22,10 +19,18 @@ permissions:
 
 jobs:
   release:
-    # Only run if the triggering workflow succeeded or manual dispatch
+    # Only run for merged release/hotfix PRs, or manual dispatch
     if: |
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
+        (
+          startsWith(github.head_ref, 'release/') ||
+          startsWith(github.head_ref, 'hotfix/') ||
+          contains(github.event.pull_request.labels.*.name, 'release')
+        )
+      )
     uses: ./.github/workflows/release-reusable.yml
     with:
       target_branch: main
