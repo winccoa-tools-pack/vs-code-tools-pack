@@ -11,7 +11,7 @@ on:
       mode:
         description: "dry-run prints payloads; apply updates repo/settings/rulesets"
         required: true
-        default: "dry-run"
+        default: "apply"
         type: choice
         options:
           - dry-run
