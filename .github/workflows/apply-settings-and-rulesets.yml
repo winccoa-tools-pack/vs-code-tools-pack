@@ -75,14 +75,21 @@ jobs:
           echo "--- security.json ---"; cat security.json; echo
           echo "--- rulesets ---"; ls -la ruleset_payloads || true
 
-      - name: Authenticate gh
+      - name: Validate GitHub token
         if: ${{ steps.mode.outputs.mode == 'apply' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN != '' && secrets.REPO_ADMIN_TOKEN || github.token }}
         run: |
-          echo "$GH_TOKEN" | gh auth login --with-token
-          gh auth status
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::GH_TOKEN is empty. Ensure the repo secret REPO_ADMIN_TOKEN exists (recommended) or GITHUB_TOKEN is available."
+            exit 1
+          fi
+
+          gh --version
+          # Validate token is usable (works for both REPO_ADMIN_TOKEN and GITHUB_TOKEN)
+          gh api -H "Accept: application/vnd.github+json" user >/dev/null
 
       - name: Apply repository settings
         if: ${{ steps.mode.outputs.mode == 'apply' && steps.prep.outputs.has_settings == 'true' }}
