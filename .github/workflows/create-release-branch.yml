@@ -45,9 +45,10 @@ jobs:
         id: create
         uses: actions/github-script@v8
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.REPO_ADMIN_TOKEN != '' && secrets.REPO_ADMIN_TOKEN || github.token }}
           script: |
-            const version = (context.payload.inputs?.version || '').trim();
+            const rawVersion = (context.payload.inputs?.version || '').trim();
+            const version = rawVersion.replace(/^v/i, '');
             const baseBranch = (context.payload.inputs?.base_branch || 'develop').trim();
             const targetBranch = (context.payload.inputs?.target_branch || 'main').trim();
             const draft = String(context.payload.inputs?.draft || 'false').toLowerCase() === 'true';
@@ -57,7 +58,7 @@ jobs:
               : [];
 
             if (!/^\d+\.\d+\.\d+$/.test(version)) {
-              core.setFailed(`Invalid version '${version}'. Expected SemVer like 1.2.3`);
+              core.setFailed(`Invalid version '${rawVersion}'. Expected SemVer like 1.2.3 (optional leading 'v' allowed)`);
               return;
             }
 
@@ -96,12 +97,21 @@ jobs:
             if (!branchExists) {
               const sha = base.data.commit.sha;
               core.info(`Creating ${releaseBranch} at ${sha}`);
-              await github.rest.git.createRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: `refs/heads/${releaseBranch}`,
-                sha,
-              });
+              try {
+                await github.rest.git.createRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `refs/heads/${releaseBranch}`,
+                  sha,
+                });
+              } catch (error) {
+                const status = error?.status;
+                const msg = error?.message || String(error);
+                core.setFailed(
+                  `Failed to create branch '${releaseBranch}'. This is usually caused by rulesets/branch protections blocking ref creation or missing token permissions. (HTTP ${status ?? 'unknown'}) ${msg}`
+                );
+                return;
+              }
             }
 
             // 3) Reuse existing open PR if present
