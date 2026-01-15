@@ -32,3 +32,9 @@ rules:
 
   - type: "required_linear_history"
     parameters: {}
+
+# Allow organization admins to bypass the PR review requirement (but keep other protections).
+bypass_actors:
+  - actor_id: 1
+    actor_type: "OrganizationAdmin"
+    bypass_mode: "pull_request"
