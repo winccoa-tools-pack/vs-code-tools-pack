@@ -75,7 +75,7 @@ jobs:
           echo "--- security.json ---"; cat security.json; echo
           echo "--- rulesets ---"; ls -la ruleset_payloads || true
 
-      - name: Validate GitHub token
+      - name: Validate GitHub token (repo admin)
         if: ${{ steps.mode.outputs.mode == 'apply' }}
         shell: bash
         env:
@@ -88,8 +88,17 @@ jobs:
           fi
 
           gh --version
-          # Validate token is usable (works for both REPO_ADMIN_TOKEN and GITHUB_TOKEN)
-          gh api -H "Accept: application/vnd.github+json" user >/dev/null
+
+          REPO="${{ github.repository }}"
+          IFS='/' read -r OWNER NAME <<< "$REPO"
+
+          # Validate token can access this repository and has admin rights (required for PATCH repo settings and rulesets).
+          HAS_ADMIN=$(gh api -H "Accept: application/vnd.github+json" "repos/$OWNER/$NAME" --jq '.permissions.admin // false' || echo "false")
+          if [ "$HAS_ADMIN" != "true" ]; then
+            echo "::error::Token does not have admin access to $REPO."
+            echo "::error::Fix: recreate REPO_ADMIN_TOKEN with classic scope 'repo' (and authorize SSO if your org enforces it), OR fine-grained PAT with repository access + Administration: Read and write."
+            exit 1
+          fi
 
       - name: Apply repository settings
         if: ${{ steps.mode.outputs.mode == 'apply' && steps.prep.outputs.has_settings == 'true' }}
