@@ -1,0 +1,38 @@
+name: "Release & Hotfix branch protection"
+target: "branch"
+# Start in evaluate mode to avoid blocking merges during rollout.
+enforcement: "evaluate"
+
+conditions:
+  ref_name:
+    include:
+      - "refs/heads/release/*"
+      - "refs/heads/hotfix/*"
+    exclude: []
+
+rules:
+  - type: "non_fast_forward"
+    parameters: {}
+
+  - type: "deletion"
+    parameters: {}
+
+  - type: "pull_request"
+    parameters:
+      required_approving_review_count: 1
+      dismiss_stale_reviews_on_push: true
+      require_code_owner_review: false
+      require_last_push_approval: false
+      required_review_thread_resolution: false
+
+  - type: "required_status_checks"
+    parameters:
+      strict_required_status_checks_policy: true
+      required_status_checks:
+        - context: "Required Checks / Gate"
+
+  - type: "required_conversation_resolution"
+    parameters: {}
+
+  - type: "required_linear_history"
+    parameters: {}

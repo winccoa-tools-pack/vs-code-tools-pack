@@ -1,0 +1,31 @@
+name: Required Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - edited
+
+permissions:
+  actions: read
+
+jobs:
+  gate:
+    name: Gate
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    uses: winccoa-tools-pack/.github/.github/workflows/wait-for-workflows-reusable.yml@main
+    with:
+      sha: ${{ github.event.pull_request.head.sha }}
+      workflows: |
+        CI/CD Pipeline
+        PR Labels
+        Git Flow Validation
+      timeout_seconds: 1800
+      poll_interval_seconds: 10
+    secrets: inherit
