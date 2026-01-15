@@ -1,7 +1,7 @@
 name: "Main (stable) branch protection"
 target: "branch"
 # Start in evaluate mode to avoid blocking merges during rollout.
-enforcement: "evaluate"
+enforcement: "active"
 
 conditions:
   ref_name:
