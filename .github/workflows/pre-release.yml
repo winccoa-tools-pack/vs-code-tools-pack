@@ -26,19 +26,20 @@ permissions:
 
 jobs:
   wait-required-workflows:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'release/') }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     uses: winccoa-tools-pack/.github/.github/workflows/wait-for-workflows-reusable.yml@main
     with:
       sha: ${{ github.event.pull_request.head.sha }}
       workflows: |
         CI/CD Pipeline
         PR Labels
+        Git Flow Validation
       timeout_seconds: 1800
       poll_interval_seconds: 10
 
   pre-release:
     needs: [wait-required-workflows]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'release/') && needs.wait-required-workflows.result == 'success')) }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.wait-required-workflows.result == 'success')) }}
     uses: ./.github/workflows/prerelease-reusable.yml
     with:
       target_branch: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
