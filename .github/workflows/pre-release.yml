@@ -43,6 +43,7 @@ jobs:
     uses: ./.github/workflows/prerelease-reusable.yml
     with:
       target_branch: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+      validate_release_branch: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v') }}
     secrets: inherit
 
   cleanup-old-prereleases:
