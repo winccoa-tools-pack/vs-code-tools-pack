@@ -30,8 +30,5 @@ rules:
       required_status_checks:
         - context: "Required Checks / Gate"
 
-  - type: "required_conversation_resolution"
-    parameters: {}
-
   - type: "required_linear_history"
     parameters: {}
