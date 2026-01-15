@@ -89,16 +89,30 @@ jobs:
 
           gh --version
 
+          # Helpful debug: show classic PAT scopes (fine-grained tokens may show empty scopes)
+          OAUTH_SCOPES=$(gh api --include -H "Accept: application/vnd.github+json" user 2>/dev/null \
+            | tr -d '\r' \
+            | awk 'tolower($0) ~ /^x-oauth-scopes:/ {sub(/^[^:]*: /, ""); print; exit}')
+          if [ -n "${OAUTH_SCOPES:-}" ]; then
+            echo "Token OAuth scopes: ${OAUTH_SCOPES}"
+          else
+            echo "Token OAuth scopes: (not reported; likely fine-grained token)"
+          fi
+
           REPO="${{ github.repository }}"
           IFS='/' read -r OWNER NAME <<< "$REPO"
 
           # Validate token can access this repository and has admin rights (required for PATCH repo settings and rulesets).
+          gh api -H "Accept: application/vnd.github+json" "repos/$OWNER/$NAME" --jq '.permissions' || true
           HAS_ADMIN=$(gh api -H "Accept: application/vnd.github+json" "repos/$OWNER/$NAME" --jq '.permissions.admin // false' || echo "false")
           if [ "$HAS_ADMIN" != "true" ]; then
             echo "::error::Token does not have admin access to $REPO."
             echo "::error::Fix: recreate REPO_ADMIN_TOKEN with classic scope 'repo' (and authorize SSO if your org enforces it), OR fine-grained PAT with repository access + Administration: Read and write."
             exit 1
           fi
+
+          # Extra validation: rulesets endpoint also requires admin access.
+          gh api -H "Accept: application/vnd.github+json" "repos/$OWNER/$NAME/rulesets" >/dev/null
 
       - name: Apply repository settings
         if: ${{ steps.mode.outputs.mode == 'apply' && steps.prep.outputs.has_settings == 'true' }}
