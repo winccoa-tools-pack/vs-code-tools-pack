@@ -1,4 +1,4 @@
-name: Pre-Release (Develop)
+name: Pre-Release (Beta)
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ on:
     inputs: {}
 
 concurrency:
-  group: prerelease-release-branch-${{ github.event.pull_request.number || github.ref }}
+  group: prerelease-beta-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -62,7 +62,7 @@ jobs:
     steps:
       - name: Success Notification
         run: |
-          echo "🧪 Dev pre-release ${{ needs.pre-release.outputs.tag }} created successfully!"
+          echo "🧪 Beta pre-release ${{ needs.pre-release.outputs.tag }} created successfully!"
           echo "📦 Tested VSIX attached to the GitHub pre-release"
           echo "🔍 Available for testing and validation"
           echo "📝 Auto-generated from develop"
