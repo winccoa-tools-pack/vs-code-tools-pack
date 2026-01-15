@@ -1,3 +1,4 @@
+
 name: Sync template files to repositories
 
 on:
@@ -5,11 +6,9 @@ on:
     - cron: "15 6 * * 1-5"
   workflow_dispatch:
 
-# Top‑level permissions — required for modifying workflow files
 permissions:
   contents: write
   pull-requests: write
-  issues: write
 
 jobs:
   sync:
@@ -34,5 +33,4 @@ jobs:
    #   pr_reviewers: "REPLACE_WITH_REAL_USERS_OR_TEAMS"
       branch_prefix: "chore/template-sync"
 
-    secrets:
-      token: ${{ secrets.TEMPLATE_SYNC_PAT }}
+    secrets: inherit

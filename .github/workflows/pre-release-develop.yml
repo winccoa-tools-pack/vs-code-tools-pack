@@ -26,67 +26,9 @@ jobs:
       validate_release_branch: false
     secrets: inherit
 
-  cleanup-old-prereleases:
-    runs-on: ubuntu-latest
-    needs: [pre-release]
-    if: always() && needs.pre-release.result == 'success'
-
-    permissions:
-      contents: write
-
-    env:
-      TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
-      KEEP_LATEST: "2"
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-      - name: Remove older prereleases for this branch
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "🧹 Cleaning prereleases for branch: ${TARGET_BRANCH} (keep latest ${KEEP_LATEST})"
-
-          REPO="${GITHUB_REPOSITORY}"
-
-          # List prereleases newest-first.
-          TAGS_OUTPUT=$(gh release list --repo "$REPO" --limit 200 --json tagName,isPrerelease,createdAt \
-            --jq '[.[] | select(.isPrerelease == true)] | sort_by(.createdAt) | reverse | .[].tagName')
-
-          mapfile -t ALL_TAGS <<< "$TAGS_OUTPUT"
-
-          if [ ${#ALL_TAGS[@]} -eq 0 ]; then
-            echo "✅ No prereleases found"
-            exit 0
-          fi
-
-          MATCHED=()
-          for TAG in "${ALL_TAGS[@]}"; do
-            BODY=$(gh release view --repo "$REPO" "$TAG" --json body --jq '.body' 2>/dev/null || true)
-            if echo "$BODY" | grep -q "Source branch: ${TARGET_BRANCH}"; then
-              MATCHED+=("$TAG")
-            fi
-          done
-
-          if [ ${#MATCHED[@]} -le ${KEEP_LATEST} ]; then
-            echo "✅ Nothing to delete (matched ${#MATCHED[@]} prereleases)"
-            exit 0
-          fi
-
-          echo "Found ${#MATCHED[@]} prereleases for '${TARGET_BRANCH}':"
-          printf '  - %s\n' "${MATCHED[@]}"
-
-          TO_DELETE=("${MATCHED[@]:${KEEP_LATEST}}")
-          echo "Deleting ${#TO_DELETE[@]} older prereleases:"
-          printf '  - %s\n' "${TO_DELETE[@]}"
-
-          for TAG in "${TO_DELETE[@]}"; do
-            gh release delete --repo "$REPO" "$TAG" --yes --cleanup-tag || echo "::warning::Failed to delete $TAG"
-          done
-
   notify-success:
     runs-on: ubuntu-latest
-    needs: [pre-release, cleanup-old-prereleases]
+    needs: [pre-release]
     if: success()
 
     steps:
