@@ -130,7 +130,7 @@ jobs:
           fi
 
           if jq -e 'type=="array"' topics.json >/dev/null; then
-            jq -n --argfile t topics.json '{names: $t}' > topics_payload.json
+            python3 -c "import json; t=json.load(open('topics.json','r',encoding='utf-8')); json.dump({'names': t}, open('topics_payload.json','w',encoding='utf-8'))"
             gh api --method PUT -H "Accept: application/vnd.github+json" \
               "repos/$OWNER/$NAME/topics" --input topics_payload.json
           else
