@@ -20,6 +20,10 @@ jobs:
       sync_mode:     "update"
       paths: |
         .github/workflows/sync-org-files.yml
+        .github/workflows/apply-settings-and-rulesets.yml
+        .github/scripts/generate_settings_payloads.py
+        .github/repository.settings.yml
+        .github/rulesets/**/*.yml
         SECURITY.md
         FUNDING.yml
         LICENSE
