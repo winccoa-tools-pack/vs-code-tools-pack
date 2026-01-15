@@ -80,11 +80,11 @@ jobs:
             }
 
             // Conventional Commits validation
+            // Squash merge uses the PR title as the final commit message.
+            // Validate the PR title instead of individual commits.
             // Matches: type(scope)!: subject
             // Example: feat(parser)!: support x
             const conventionalRe = /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^\r\n()]+\))?(!)?:\s.+/;
-
-            const { owner, repo } = context.repo;
 
             // Bot PRs (e.g. Dependabot) often use non-conventional commit messages.
             // Allow them for dedicated bot-only branch prefixes.
@@ -95,36 +95,13 @@ jobs:
               return;
             }
 
-            const commits = await github.paginate(github.rest.pulls.listCommits, {
-              owner,
-              repo,
-              pull_number: pr.number,
-              per_page: 100,
-            });
-
-            const badCommits = [];
-            for (const c of commits) {
-              const sha = c.sha;
-              const message = (c.commit && c.commit.message) ? c.commit.message : '';
-              const firstLine = message.split(/\r?\n/)[0].trim();
-
-              // Allow merge commits (GitHub merge, merging base branch into PR, etc.)
-              if (firstLine.startsWith('Merge ')) continue;
-
-              if (!conventionalRe.test(firstLine)) {
-                badCommits.push({ sha, firstLine });
-              }
-            }
-
-            if (badCommits.length > 0) {
-              const preview = badCommits
-                .slice(0, 10)
-                .map(c => `- ${c.sha.slice(0, 7)}: ${c.firstLine || '(empty message)'}`)
-                .join('\n');
-
+            const title = String(pr.title || '').trim();
+            if (!title) {
+              errors.push('PR title is empty; expected a Conventional Commits style title (used for squash merge).');
+            } else if (!conventionalRe.test(title)) {
               errors.push(
-                `Found ${badCommits.length} commit(s) that do not follow Conventional Commits. ` +
-                `Expected e.g. "feat(scope): subject" or "fix: subject".\n\n${preview}`
+                `PR title does not follow Conventional Commits (used for squash merge). ` +
+                `Expected e.g. "feat(scope): subject" or "fix: subject". Got: "${title}".`
               );
             }
 
