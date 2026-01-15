@@ -72,6 +72,14 @@ def main() -> None:
             # Safety: never rely on hard-coded IDs from YAML
             data.pop("id", None)
 
+            # API compatibility: for some rule types, `parameters` is not allowed.
+            # Strip empty parameters blocks to avoid 422 "data matches no possible input".
+            rules = data.get("rules")
+            if isinstance(rules, list):
+                for rule in rules:
+                    if isinstance(rule, dict) and rule.get("parameters") == {}:
+                        rule.pop("parameters", None)
+
             out = OUT_RULESETS_DIR / f"{yml_path.stem}.json"
             write_json(out, data)
 
