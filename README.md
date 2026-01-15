@@ -2,6 +2,16 @@
 
 A small Visual Studio Code extension pack that groups useful extensions for [SIMATIC WinCC Open Architecture](https://www.siemens.com/global/en/products/automation/industry-software/automation-software/scada/simatic-wincc-oa.html).
 
+Currently added extensions:
+
++ mPokornyETM.wincc-oa-projects 
++ RichardJanisch.winccoa-script-actions
++ RichardJanisch.winccoa-vscode-logviewer
++ RichardJanisch.winccoa-vscode-tests
++ RichardJanisch.winccoa-sidepanel
++ RichardJanisch.winccoa-ctrl
+
+
 ---
 
 ## Install
