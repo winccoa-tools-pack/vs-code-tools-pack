@@ -4,6 +4,8 @@ on:
   workflow_run:
     workflows:
       - "CI/CD Pipeline"
+      - "Integration Tests - WinCC OA"
+      - "PR Labels"
     types:
       - completed
     branches:

@@ -1,4 +1,4 @@
-name: Pre-Release (Reusable)
+name: Reusable Action Pre-Release
 
 on:
   workflow_call:

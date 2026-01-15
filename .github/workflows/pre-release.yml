@@ -1,108 +1,116 @@
 name: Pre-Release (Release Branch)
 
 on:
-    workflow_run:
-        workflows:
-            - "CI/CD Pipeline"
-            - "Integration Tests - WinCC OA"
-        types:
-            - completed
-        branches:
-            - release/**
-    workflow_dispatch:
-        inputs: {}
+  workflow_run:
+    workflows:
+      - "CI/CD Pipeline"
+      - "Integration Tests - WinCC OA"
+      - "PR Labels"
+    types:
+      - completed
+    branches:
+      - release/**
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  workflow_dispatch:
+    inputs: {}
 
 permissions:
-    contents: write
-    pull-requests: write
-    packages: write
-    actions: write
-    checks: write
-    issues: write
-    # Need to bypass branch protection for automated version commits
-    # This requires repository admin access or using a PAT
+  contents: write
+  pull-requests: write
+  packages: write
+  actions: write
+  checks: write
+  issues: write
+  # Need to bypass branch protection for automated version commits
+  # This requires repository admin access or using a PAT
 
 jobs:
-    pre-release:
-        # Only run if the triggering workflow succeeded
-        if: |
-            github.event_name == 'workflow_dispatch' ||
-            github.event.workflow_run.conclusion == 'success'
-        uses: ./.github/workflows/prerelease-reusable.yml
-        with:
-            target_branch: ${{ github.event.workflow_run.head_branch || github.ref_name }}
-        secrets: inherit
+  pre-release:
+    # Run as a PR check for release/* -> main, and also after successful workflow_run.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'release/')) }}
+    uses: ./.github/workflows/prerelease-reusable.yml
+    with:
+      target_branch: ${{ github.event_name == 'pull_request' && github.head_ref || github.event.workflow_run.head_branch || github.ref_name }}
+    secrets: inherit
 
-    cleanup-old-prereleases:
-        runs-on: ubuntu-latest
-        needs: [pre-release]
-        if: always() && needs.pre-release.result == 'success'
+  cleanup-old-prereleases:
+    runs-on: ubuntu-latest
+    needs: [pre-release]
+    if: always() && needs.pre-release.result == 'success'
 
-        permissions:
-            contents: write
+    permissions:
+      contents: write
 
-        env:
-            TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
-            KEEP_LATEST: "1"
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.event.workflow_run.head_branch || github.ref_name }}
+      KEEP_LATEST: "1"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-        steps:
-            - name: Remove older prereleases for this branch
-              shell: bash
-              run: |
-                  set -euo pipefail
+    steps:
+      - name: Remove older prereleases for this branch
+        shell: bash
+        run: |
+          set -euo pipefail
 
-                  echo "🧹 Cleaning prereleases for branch: ${TARGET_BRANCH} (keep latest ${KEEP_LATEST})"
+          echo "🧹 Cleaning prereleases for branch: ${TARGET_BRANCH} (keep latest ${KEEP_LATEST})"
 
-                  REPO="${GITHUB_REPOSITORY}"
+          REPO="${GITHUB_REPOSITORY}"
 
-                  # List prereleases newest-first.
-                  TAGS_OUTPUT=$(gh release list --repo "$REPO" --limit 200 --json tagName,isPrerelease,createdAt \
-                    --jq '[.[] | select(.isPrerelease == true)] | sort_by(.createdAt) | reverse | .[].tagName')
+          # List prereleases newest-first.
+          TAGS_OUTPUT=$(gh release list --repo "$REPO" --limit 200 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease == true)] | sort_by(.createdAt) | reverse | .[].tagName')
 
-                  mapfile -t ALL_TAGS <<< "$TAGS_OUTPUT"
+          mapfile -t ALL_TAGS <<< "$TAGS_OUTPUT"
 
-                  if [ ${#ALL_TAGS[@]} -eq 0 ]; then
-                    echo "✅ No prereleases found"
-                    exit 0
-                  fi
+          if [ ${#ALL_TAGS[@]} -eq 0 ]; then
+            echo "✅ No prereleases found"
+            exit 0
+          fi
 
-                  MATCHED=()
-                  for TAG in "${ALL_TAGS[@]}"; do
-                    BODY=$(gh release view --repo "$REPO" "$TAG" --json body --jq '.body' 2>/dev/null || true)
-                    if echo "$BODY" | grep -q "Source branch: ${TARGET_BRANCH}"; then
-                      MATCHED+=("$TAG")
-                    fi
-                  done
+          MATCHED=()
+          for TAG in "${ALL_TAGS[@]}"; do
+            BODY=$(gh release view --repo "$REPO" "$TAG" --json body --jq '.body' 2>/dev/null || true)
+            if echo "$BODY" | grep -q "Source branch: ${TARGET_BRANCH}"; then
+              MATCHED+=("$TAG")
+            fi
+          done
 
-                  if [ ${#MATCHED[@]} -le ${KEEP_LATEST} ]; then
-                    echo "✅ Nothing to delete (matched ${#MATCHED[@]} prereleases)"
-                    exit 0
-                  fi
+          if [ ${#MATCHED[@]} -le ${KEEP_LATEST} ]; then
+            echo "✅ Nothing to delete (matched ${#MATCHED[@]} prereleases)"
+            exit 0
+          fi
 
-                  echo "Found ${#MATCHED[@]} prereleases for '${TARGET_BRANCH}':"
-                  printf '  - %s\n' "${MATCHED[@]}"
+          echo "Found ${#MATCHED[@]} prereleases for '${TARGET_BRANCH}':"
+          printf '  - %s\n' "${MATCHED[@]}"
 
-                  TO_DELETE=("${MATCHED[@]:${KEEP_LATEST}}")
-                  echo "Deleting ${#TO_DELETE[@]} older prereleases:"
-                  printf '  - %s\n' "${TO_DELETE[@]}"
+          TO_DELETE=("${MATCHED[@]:${KEEP_LATEST}}")
+          echo "Deleting ${#TO_DELETE[@]} older prereleases:"
+          printf '  - %s\n' "${TO_DELETE[@]}"
 
-                  for TAG in "${TO_DELETE[@]}"; do
-                    gh release delete --repo "$REPO" "$TAG" --yes --cleanup-tag || echo "::warning::Failed to delete $TAG"
-                  done
+          for TAG in "${TO_DELETE[@]}"; do
+            gh release delete --repo "$REPO" "$TAG" --yes --cleanup-tag || echo "::warning::Failed to delete $TAG"
+          done
 
-    notify-success:
-        runs-on: ubuntu-latest
-        needs: [pre-release, cleanup-old-prereleases]
+  notify-success:
+    runs-on: ubuntu-latest
+    needs: [pre-release, cleanup-old-prereleases]
+    if: success()
 
-        steps:
-            - name: Success Notification
-              run: |
-                  echo "🧪 Pre-release ${{ needs.pre-release.outputs.tag }} created successfully!"
-                  echo "📦 Tested VSIX attached to the GitHub pre-release"
-                  echo "🔍 Available for testing and validation"
-                  echo "📝 Auto-generated from release branch"
-                  echo ""
-                  echo "🔗 Pre-release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.pre-release.outputs.tag }}"
-                  echo ""
-                  echo "🧪 Test the pre-release and provide feedback!"
+    steps:
+      - name: Success Notification
+        run: |
+          echo "🧪 Pre-release ${{ needs.pre-release.outputs.tag }} created successfully!"
+          echo "📦 Tested VSIX attached to the GitHub pre-release"
+          echo "🔍 Available for testing and validation"
+          echo "📝 Auto-generated from release branch"
+          echo ""
+          echo "🔗 Pre-release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.pre-release.outputs.tag }}"
+          echo ""
+          echo "🧪 Test the pre-release and provide feedback!"
