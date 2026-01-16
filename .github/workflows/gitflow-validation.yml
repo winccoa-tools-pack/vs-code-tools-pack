@@ -117,6 +117,23 @@ jobs:
               core.notice('Reminder: delete the branch after merge (feature/bugfix/release/hotfix).');
             }
 
+  required:
+    name: Required
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event.action != 'closed' }}
+    needs:
+      - validate-gitflow
+    steps:
+      - name: Verify required jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "validate-gitflow: ${{ needs.validate-gitflow.result }}"
+          if [ "${{ needs.validate-gitflow.result }}" != "success" ]; then
+            echo "::error::Git Flow Validation failed"
+            exit 1
+          fi
+
   remind-branch-deletion:
     name: Remind to delete merged branch
     runs-on: ubuntu-latest
