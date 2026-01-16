@@ -2,7 +2,7 @@
     "name": "wincc-oa-tools-pack",
     "displayName": "WinCC OA Tools Pack",
     "publisher": "mPokornyETM",
-    "version": "0.0.7",
+    "version": "0.0.8",
     "engines": {
         "vscode": "^1.60.0"
     },
