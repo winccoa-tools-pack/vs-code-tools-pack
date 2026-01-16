@@ -27,6 +27,7 @@ jobs:
     uses: winccoa-tools-pack/.github/.github/workflows/versioning-tags-changelog-reusable.yml@main
     with:
       mode: release
+      target_branch: ${{ inputs.target_branch }}
       create_tag: false
       push_tag: false
     secrets: inherit
@@ -67,6 +68,7 @@ jobs:
     needs: [precheck]
     with:
       mode: release
+      target_branch: ${{ inputs.target_branch }}
       create_tag: true
       push_tag: true
       force_push_tag: false
@@ -126,7 +128,7 @@ jobs:
         with:
           tag_name: ${{ needs.tag.outputs.tag }}
           name: ${{ format('Release {0}', needs.tag.outputs.tag) }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ inputs.target_branch }}
           body: |
             ${{ needs.versioning.outputs.changelog }}
 
