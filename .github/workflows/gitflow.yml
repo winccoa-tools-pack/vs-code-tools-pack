@@ -46,13 +46,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          git fetch origin "${SOURCE_BRANCH}:${SOURCE_BRANCH}" "${BASE_BRANCH}:${BASE_BRANCH}" || true
+          REPO="${GITHUB_REPOSITORY}"
+          OWNER="${REPO%%/*}"
+
+          # Fetch remote refs without writing into checked-out local branches
           git fetch origin "+refs/heads/${SOURCE_BRANCH}:refs/remotes/origin/${SOURCE_BRANCH}" "+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
 
           TITLE="chore(gitflow): upmerge ${SOURCE_BRANCH} -> ${BASE_BRANCH}"
           BODY=$'Automated upmerge PR.\n\nSource: `main`\nTarget: `develop`\nBranch: `feature/upmerge-main-to-develop`\n\nIf there are merge conflicts:\n1) Checkout `feature/upmerge-main-to-develop` locally\n2) Run `git fetch origin` then `git merge origin/develop`\n3) Resolve conflicts, commit, and push'
 
-          EXISTING_PR=$(gh pr list --state open --head "${HEAD_BRANCH}" --base "${BASE_BRANCH}" --json number --jq '.[0].number' || true)
+          # Find an existing open PR for HEAD_BRANCH -> BASE_BRANCH.
+          # Use GitHub API to avoid relying on gh CLI JSON flags that vary by version.
+          EXISTING_PR=$(gh api "repos/${REPO}/pulls?state=open&head=${OWNER}:${HEAD_BRANCH}&base=${BASE_BRANCH}" --jq '.[0].number' 2>/dev/null || true)
 
           if [ -n "${EXISTING_PR}" ] && [ "${EXISTING_PR}" != "null" ]; then
             echo "Found existing PR #${EXISTING_PR} for ${HEAD_BRANCH} -> ${BASE_BRANCH}"
@@ -87,6 +92,12 @@ jobs:
             gh pr edit "${EXISTING_PR}" --title "${TITLE}" --body "${BODY}" >/dev/null
             echo "Updated PR #${EXISTING_PR}"
           else
-            PR_URL=$(gh pr create --head "${HEAD_BRANCH}" --base "${BASE_BRANCH}" --title "${TITLE}" --body "${BODY}" ${DRAFT_FLAG} --json url --jq .url)
-            echo "Created PR: ${PR_URL}"
+            CREATE_OUT=$(gh pr create --head "${HEAD_BRANCH}" --base "${BASE_BRANCH}" --title "${TITLE}" --body "${BODY}" ${DRAFT_FLAG})
+            echo "$CREATE_OUT"
+            PR_URL=$(echo "$CREATE_OUT" | grep -Eo 'https://github\.com/[^ ]+/pull/[0-9]+' | head -n 1 || true)
+            if [ -n "${PR_URL}" ]; then
+              echo "Created PR: ${PR_URL}"
+            else
+              echo "::warning::PR created but URL could not be parsed from output."
+            fi
           fi
