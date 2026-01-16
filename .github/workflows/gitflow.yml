@@ -1,13 +1,8 @@
 name: Upmerge main to develop (PR)
 
 on:
-  workflow_run:
-    workflows:
-      - "Release"
-    types:
-      - completed
-    branches:
-      - main
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
 concurrency:
