@@ -23,7 +23,7 @@ jobs:
           configuration-path: .github/labeler.yml
 
   required:
-    name: Required
+    name: PR Labels - Required
     runs-on: ubuntu-latest
     if: ${{ always() && github.event.pull_request.head.repo.full_name == github.repository }}
     needs:
