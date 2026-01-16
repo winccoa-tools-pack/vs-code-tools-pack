@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows:
       - "CI/CD Pipeline"
-      - "Integration Tests - WinCC OA"
     types:
       - completed
     branches:
