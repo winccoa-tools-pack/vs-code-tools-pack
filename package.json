@@ -2,12 +2,14 @@
     "name": "wincc-oa-tools-pack",
     "displayName": "WinCC OA Tools Pack",
     "publisher": "mPokornyETM",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "engines": {
         "vscode": "^1.60.0"
     },
     "description": "A small extension pack that groups VS Code tools used for WinCC OA development.",
-    "categories": ["Extension Packs"],
+    "categories": [
+        "Extension Packs"
+    ],
     "keywords": [
         "wincc-oa",
         "scada",
