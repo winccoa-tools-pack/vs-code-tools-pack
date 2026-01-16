@@ -118,7 +118,7 @@ jobs:
             }
 
   required:
-    name: Required
+    name: Git Flow Validation - Required
     runs-on: ubuntu-latest
     if: ${{ always() && github.event.action != 'closed' }}
     needs:

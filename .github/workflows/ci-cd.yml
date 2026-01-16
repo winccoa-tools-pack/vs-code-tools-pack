@@ -208,7 +208,7 @@ jobs:
           docker rm -f winccoa-ci || true
 
   required:
-    name: Required
+    name: CI/CD Pipeline - Required
     runs-on: ubuntu-latest
     if: ${{ always() }}
     needs:
