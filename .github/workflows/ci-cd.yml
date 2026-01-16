@@ -206,3 +206,48 @@ jobs:
         shell: bash
         run: |
           docker rm -f winccoa-ci || true
+
+  required:
+    name: CI/CD Pipeline - Required
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - detect-extension-pack
+      - lint
+      - format
+      - test
+      - integration-winccoa
+    steps:
+      - name: Verify required jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Treat skipped as OK (e.g. extension pack repos)
+          RESULTS=(
+            "detect-extension-pack:${{ needs.detect-extension-pack.result }}"
+            "lint:${{ needs.lint.result }}"
+            "format:${{ needs.format.result }}"
+            "test:${{ needs.test.result }}"
+            "integration-winccoa:${{ needs.integration-winccoa.result }}"
+          )
+
+          echo "Job results:"
+          printf ' - %s\n' "${RESULTS[@]}"
+
+          FAIL=0
+          for r in "${RESULTS[@]}"; do
+            status="${r#*:}"
+            case "$status" in
+              success|skipped)
+                ;;
+              *)
+                echo "::error::Required job did not succeed: $r"
+                FAIL=1
+                ;;
+            esac
+          done
+
+          if [ "$FAIL" -ne 0 ]; then
+            exit 1
+          fi
