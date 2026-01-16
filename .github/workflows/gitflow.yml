@@ -1,4 +1,4 @@
-name: Gitflow Auto-Merge
+name: Upmerge main to develop (PR)
 
 on:
   workflow_run:
@@ -8,27 +8,85 @@ on:
       - completed
     branches:
       - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: upmerge-main-to-develop
+  cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
-  merge-back:
-    name: Gitflow
+  upmerge:
+    name: Create/Update upmerge PR
     runs-on: ubuntu-latest
-    # Only run if the release workflow succeeded
-    if: github.event.workflow_run.conclusion == 'success'
-    
+
     steps:
-      - name: Run gitflow action
-        uses: Logerfo/gitflow-action@0.0.5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          dev: develop
-          master: main
-          release: release
-          release-regex: '^release/(.*)'
-          label: gitflow
-          auto-merge: true
-          require-merge: false
+          fetch-depth: 0
+
+      - name: Configure git
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create or update upmerge branch + PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_BRANCH: feature/upmerge-main-to-develop
+          BASE_BRANCH: develop
+          SOURCE_BRANCH: main
+        run: |
+          set -euo pipefail
+
+          git fetch origin "${SOURCE_BRANCH}:${SOURCE_BRANCH}" "${BASE_BRANCH}:${BASE_BRANCH}" || true
+          git fetch origin "+refs/heads/${SOURCE_BRANCH}:refs/remotes/origin/${SOURCE_BRANCH}" "+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
+
+          TITLE="chore(gitflow): upmerge ${SOURCE_BRANCH} -> ${BASE_BRANCH}"
+          BODY=$'Automated upmerge PR.\n\nSource: `main`\nTarget: `develop`\nBranch: `feature/upmerge-main-to-develop`\n\nIf there are merge conflicts:\n1) Checkout `feature/upmerge-main-to-develop` locally\n2) Run `git fetch origin` then `git merge origin/develop`\n3) Resolve conflicts, commit, and push'
+
+          EXISTING_PR=$(gh pr list --state open --head "${HEAD_BRANCH}" --base "${BASE_BRANCH}" --json number --jq '.[0].number' || true)
+
+          if [ -n "${EXISTING_PR}" ] && [ "${EXISTING_PR}" != "null" ]; then
+            echo "Found existing PR #${EXISTING_PR} for ${HEAD_BRANCH} -> ${BASE_BRANCH}"
+            git fetch origin "+refs/heads/${HEAD_BRANCH}:refs/remotes/origin/${HEAD_BRANCH}" || true
+            git checkout -B "${HEAD_BRANCH}" "origin/${HEAD_BRANCH}"
+
+            # Bring in new commits from main
+            if ! git merge --no-edit "origin/${SOURCE_BRANCH}"; then
+              echo "::warning::Merge conflict while merging ${SOURCE_BRANCH} into ${HEAD_BRANCH}."
+              echo "::warning::Leaving branch as-is; please resolve conflicts locally."
+              git merge --abort || true
+            fi
+          else
+            echo "No existing PR found; creating ${HEAD_BRANCH} from ${SOURCE_BRANCH}"
+            git checkout -B "${HEAD_BRANCH}" "origin/${SOURCE_BRANCH}"
+          fi
+
+          # Try to pre-resolve conflicts by merging develop into the head branch.
+          # This makes the eventual PR merge into develop much less likely to conflict.
+          DRAFT_FLAG=""
+          if ! git merge --no-edit "origin/${BASE_BRANCH}"; then
+            echo "::warning::Merge conflicts detected while merging ${BASE_BRANCH} into ${HEAD_BRANCH}."
+            echo "::warning::Creating/updating PR as draft; resolve conflicts on the branch."
+            git merge --abort || true
+            DRAFT_FLAG="--draft"
+          fi
+
+          # Push the branch (force-with-lease to keep it aligned if recreated)
+          git push --force-with-lease origin "${HEAD_BRANCH}"
+
+          if [ -n "${EXISTING_PR}" ] && [ "${EXISTING_PR}" != "null" ]; then
+            gh pr edit "${EXISTING_PR}" --title "${TITLE}" --body "${BODY}" >/dev/null
+            echo "Updated PR #${EXISTING_PR}"
+          else
+            PR_URL=$(gh pr create --head "${HEAD_BRANCH}" --base "${BASE_BRANCH}" --title "${TITLE}" --body "${BODY}" ${DRAFT_FLAG} --json url --jq .url)
+            echo "Created PR: ${PR_URL}"
+          fi
